@@ -1,0 +1,22 @@
+.blueBorder {
+    border-color: #333FFF;
+    border-width: thick;
+    color: #333FFF;
+    background-color: #333FFF;
+}
+
+.blackBorder {
+  border-color: #000000;
+  color: black;
+}
+
+label {
+  width: 150px;
+  padding-right: 15px;
+  display: inline-block;
+  font-weight: bold;
+}
+
+input {
+  border-width: thin;
+}

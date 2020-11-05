@@ -31,6 +31,7 @@ class App extends Component {
           updateLocations={ this.updateLocations}
           onChange={this.onChange}
           address={this.state.address}/>
+      
         <MapComponent ref={this.mapTest} />
 
       </div>
