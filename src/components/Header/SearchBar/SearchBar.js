@@ -1,9 +1,6 @@
-import React, { useContext }  from 'react';
-import { SearchContext } from '../../../SearchContext';
-
+import React from 'react';
 
 const SearchBar = (props) => {
-  const user = useContext(SearchContext);
 
   return (
       <div className="input-group mb-3">
