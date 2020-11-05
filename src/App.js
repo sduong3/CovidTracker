@@ -10,12 +10,12 @@ class App extends Component {
     this.state = {
       address: "San Jose"
     }
-    this.mapTest = React.createRef();
+    this.mapComponent = React.createRef();
   }
 
+  // Bind function reference
   updateLocations = () => {
-    console.log("in updatelocations");
-    this.mapTest.current.logValue(this.state.address);
+    this.mapComponent.current.logValue(this.state.address);
   }
 
   onChange = (e) => {
@@ -31,8 +31,8 @@ class App extends Component {
           updateLocations={ this.updateLocations}
           onChange={this.onChange}
           address={this.state.address}/>
-      
-        <MapComponent ref={this.mapTest} />
+
+        <MapComponent ref={this.mapComponent} />
 
       </div>
     );

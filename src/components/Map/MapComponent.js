@@ -15,7 +15,7 @@ const MapComponent = forwardRef((props, ref) => {
     lat: 37.3382,
     lng: -121.8863
   }
-  const defaultZoom = 13;
+  const defaultZoom = 12;
   const [currentZoom, setZoom] = useState(13);
   var location = [];
 
@@ -24,23 +24,13 @@ const MapComponent = forwardRef((props, ref) => {
   const [ selected, setSelected ] = useState({});
   const onSelect = item => {
     setSelected(item);
+    setCaseCount(item.confirmed);
   }
   const [ currentPosition, setCurrentPosition ] = useState([]);
   const [ markers, setMarkers ] = useState([]);
-
-
-  // const success = position => {
-  //     const currentPosition = {
-  //       lat: position.coords.latitude,
-  //       lng: position.coords.longitude
-  //     }
-  //     setCurrentPosition(currentPosition);
-  //   };
-  //
-  //   useEffect(() => {
-  //      navigator.geolocation.getCurrentPosition(success);
-  //    })
-
+  const [ hotspotCoord, setHotspotCoord] = useState(defaultCenter);
+  const [ caseCount, setCaseCount ] = useState(0);
+  const [dictionary, setDictionary] = useState({});
 
   // Workaround to pass function reference from child to parent
   // function logValue() {}
@@ -52,6 +42,22 @@ const MapComponent = forwardRef((props, ref) => {
      getCoordinates(appAddress);
    }
 
+   const [launchFlag, setLaunchFlag] = useState(true);
+   getLocationsOnLaunch();
+
+
+   // Only runs at launch.
+   // First, retrieve the values in the database.
+   // Then,
+   function getLocationsOnLaunch() {
+     if (launchFlag) {
+       updateCovidCountFromDatabase();
+       getLocations("California");
+       setLaunchFlag(false);
+     }
+   }
+
+
   function getLocations(state) {
     fetch("https://covid-api.com/api/reports?date=2020-04-16&iso=USA&region_province=" + state)
       .then(response => response.json())
@@ -59,17 +65,24 @@ const MapComponent = forwardRef((props, ref) => {
         //location.push(data.data[0].region.cities);
         for(var x = 0; x < data.data[0].region.cities.length; x++) {
             data.data[0].region.cities[x].location = {lat: data.data[0].region.cities[x].lat, lng: data.data[0].region.cities[x].long};
+
+            console.log(data.data[0].region.cities[x]);
+            if (dictionary[data.data[0].region.cities[x].fips]) {
+              data.data[0].region.cities[x].confirmed = dictionary[data.data[0].region.cities[x].fips].cases;
+            }
+
             data.data[0].region.cities[x].location.lat = parseFloat(data.data[0].region.cities[x].location.lat);
             data.data[0].region.cities[x].location.lng = parseFloat(data.data[0].region.cities[x].location.lng);
 
             location.push(data.data[0].region.cities[x]);
         }
-        console.log("location is ");
-        console.log(location);
-        setLocations(location);
 
-        setZoom(19);
+        setLocations(location);
+        // console.log("location is ");
+        // console.log(location);
+        //setZoom(19);
       })
+      .catch(errpr => alert("Please enter a city or state in the United States"));
   }
 
   function getCoordinates(address){
@@ -92,10 +105,8 @@ const MapComponent = forwardRef((props, ref) => {
       })
   }
 
-  //let markers = [];
 
-
-// NOTE: Do not click on landmarks or buildings
+// NOTE: Do not click on landmarks or buildings. NOT USED AT THE Moment
   function mapClicked(mapProps, map, clickEvent) {
     console.log(mapProps);
 
@@ -114,40 +125,32 @@ const MapComponent = forwardRef((props, ref) => {
       setMarkers(old);
       console.log(markers);
     }
-    else {
-      console.log("undefined bs");
-    }
-
-    //
-    // const tempLocation = {
-    //   latitude: mapProps.hb.x,
-    //   longitude: mapProps.hb.y,
-    //   cases: 1000,
-    //   deaths: 40
-    // }
-    // axios.post('/locations.json', tempLocation)
-    //   .then(response => console.log(response))
-    //   .catch(error => console.log(error));
-
-
-
   }
 
-  // TODO: Still need to handle edge cases (do not allow user to search empty string and display alert that search found nothing if not in US)
-  function onMarkerDelete(selectedMarker) {
-    console.log("DELETE ME");
-    console.log(markers);
+  // Fetch all data in firebase and store data in array.
+  // Then, convert to dictionary
+  function updateCovidCountFromDatabase() {
+    axios.get('/locations.json')
+      .then(response => {
+        console.log(response.data);
+        const fetchedResults = [];
+        for (let key in response.data) {
 
-    // Add to list of markers to hide/remove from firebase
-    console.log(selectedMarker);
-    setSelected({});
+          fetchedResults.push(
+            {
+              ...response.data[key],
+              id: key
+            }
+          )
+        }
+
+        for (let x = 0; x < fetchedResults.length; x++) {
+          dictionary[fetchedResults[x].fips] = fetchedResults[x];
+        }
+        setDictionary(dictionary);
+      })
+      .catch(error => console.log(error));
   }
-
-let defaultTemp = {
-  lat: 37.6423231, lng:-121.8111
-}
-
-  const coords = { lat: -21.805149, lng: -49.0921657 };
 
 
 // Section: Hotspot logic
@@ -157,17 +160,62 @@ const [hotspot, setHotspot] = useState(false);
 let btn_hotspot_class = hotspot ? "blueBorder" : "blackBorder";
 ;
 
-function onEnableHotspot(e) {
-  e.preventDefault();
-  console.log("hotspot enabled");
-  setHotspot(!hotspot);
-  console.log("current status of hotspot is " + hotspot);
-}
 
+
+function createHotSpot(mapProps, map, clickEvent) {
+  console.log(currentPosition);
+  console.log(mapProps);
+
+  setHotspotCoord(
+    {lat: mapProps.latLng.lat(), lng: mapProps.latLng.lng()}
+  );
+}
 
 function onChangeInput() {
 
 }
+
+function updateCountAtLocation() {
+  let data = {
+    name: selected.name,
+    cases: caseCount,
+    fips: selected.fips
+  }
+
+  // Simple test to see if pushed to database
+  console.log(selected);
+  selected.confirmed = caseCount;
+
+  axios.post('/locations.json', data)
+    .then(response => console.log(response))
+    .catch(error => console.log(error));
+
+  alert("Updated case count at " + selected.name);
+  //store all updated values in array
+  // create new markers
+
+}
+
+// TODO: Still need to handle edge cases (do not allow user to search empty string and display alert that search found nothing if not in US)
+function onMarkerDelete(selectedMarker) {
+  console.log("DELETE ME");
+  console.log(selectedMarker);
+
+  setCaseCount(0);
+  selectedMarker.confirmed = 0;
+  // need to push to database
+
+  let data = {
+    name: selected.name,
+    cases: caseCount
+  }
+  axios.post('/locations.json', data)
+    .then(response => console.log(response))
+    .catch(error => console.log(error));
+  alert("Cleared case count at " + selected.name);
+
+}
+
 
   return (
     <div style={{"top": "5000px"}}>
@@ -177,10 +225,9 @@ function onChangeInput() {
           <input
             type="number"
             value={radius}
-            onChange={e => setRadius(e.target.value)}
+            onChange={e => setRadius(+e.target.value)}
             placeholder="1200" />
         </label>
-        <button className={btn_hotspot_class} onClick={onEnableHotspot}>Enable Hotspot</button>
       </form>
      <LoadScript
        googleMapsApiKey='AIzaSyD8Dy_5tEaquXe9u861bwg0C-78KOrBC4o'>
@@ -189,6 +236,7 @@ function onChangeInput() {
           zoom={currentZoom ? currentZoom : defaultZoom}
           center={currentPosition.lat ? currentPosition : defaultCenter}
           onRightClick={mapClicked}
+          onClick={createHotSpot}
         >
 
         // Generates all markers in the state of the searched region
@@ -210,11 +258,12 @@ function onChangeInput() {
             })
           }
 
+          // updated case values in county markers
 
          // TODO: placeholder for radius
          <Circle
-            radius={1200}
-            center={defaultCenter}
+            radius={radius}
+            center={hotspotCoord}
             onMouseover={() => console.log('mouseover')}
             onClick={() => console.log('click')}
             onMouseout={() => console.log('mouseout')}
@@ -231,7 +280,7 @@ function onChangeInput() {
            {
                markers.map((marker, index) => {
                  return (
-                 <Marker key={marker.lat + "," + marker.long} position={marker.location} onClick={() => onSelect(marker)}/>
+                 <Marker key={index} position={marker.location} onClick={() => onSelect(marker)}/>
                  )
                })
             }
@@ -249,21 +298,14 @@ function onChangeInput() {
                 <div className={classes.label}>
                   <p>
                     <label>County: </label>
-                    <input type="text" value={selected.name} onChange={onChangeInput}></input>
+                    {selected.name}
                   </p>
                   <p>
                     <label>Confirmed Cases: </label>
-                    <input type="text" value={selected.confirmed} onChange={onChangeInput}></input>
+                    <input type="number" value={caseCount} onChange={e => setCaseCount(+e.target.value)}></input>
                   </p>
-                  <p>
-                    <label>Confirmed Deaths: </label>
-                    <input type="text" value={selected.deaths} onChange={onChangeInput}></input>
-                  </p>
-                  <p>
-                    <label>Confirmed Difference: </label>
-                    <input type="text" value={selected.confirmed_diff} onChange={onChangeInput}></input>
-                  </p>
-                  <button>Confirm Changes</button>
+
+                  <button onClick={updateCountAtLocation}>Confirm Changes</button>
                   <button onClick={() => onMarkerDelete(selected)}>Delete</button>
                 </div>
             </InfoWindow>
