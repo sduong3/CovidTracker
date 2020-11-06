@@ -8,7 +8,7 @@ class App extends Component {
   constructor(props) {
     super(props);
     this.state = {
-      address: "San Jose"
+      address: "San Francisco"
     }
     this.mapComponent = React.createRef();
   }
