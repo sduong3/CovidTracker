@@ -1,13 +1,11 @@
-import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
+import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { GoogleMap, LoadScript, Marker, InfoWindow, Circle } from '@react-google-maps/api';
 import axios from '../../axios-markers';
 import classes from './MapComponent.module.css';
-import Jumbotron from 'react-bootstrap/Jumbotron';
 import { Container, Row, Col, ListGroup } from 'react-bootstrap';
 
 
 const MapComponent = forwardRef((props, ref) => {
-
   const mapStyles = {
     height: "100vh",
     width: "100%"};
@@ -22,14 +20,12 @@ const MapComponent = forwardRef((props, ref) => {
   var location = [];
 
   const [locations, setLocations] = useState([]);
-
   const [ selected, setSelected ] = useState({});
   const onSelect = item => {
     setSelected(item);
     setCaseCount(item.confirmed);
   }
   const [ currentPosition, setCurrentPosition ] = useState([]);
-  const [ markers, setMarkers ] = useState([]);
   const [ hotspotCoord, setHotspotCoord] = useState(defaultCenter);
   const [ caseCount, setCaseCount ] = useState(0);
   const [dictionary, setDictionary] = useState({});
@@ -50,45 +46,40 @@ const MapComponent = forwardRef((props, ref) => {
   const [cityDate, setCityDate] = useState("N/A");
   const [cityLastUpdate, setCityLastUpdate] = useState("N/A");
 
-  //const [foundStateFlag, setFoundStateFlag] = useState(false);
-  //const [foundCityFlag, setFoundCityFlag] = useState(false);
-
   let foundCityFlag = false;
-  let foundStateFlag = false;
-  let searchedAddress = "";
+  const [launchFlag, setLaunchFlag] = useState(true);
 
-  // Workaround to pass function reference from child to parent
-  // function logValue() {}
+  // Necessary to pass function reference from child to parent
   useImperativeHandle(ref, () => ({
      logValue
     }));
 
     function logValue (appAddress) {
       setSearchedLocation(appAddress);
-      getCoordinates(appAddress);
+      getStateNameBySearchedLocation(appAddress);
    }
 
-   const [launchFlag, setLaunchFlag] = useState(true);
 
    // Only runs at launch.
    // First, retrieve the values in the database.
    // Then,
-   function getLocationsOnLaunch() {
+   function populateMapOnLaunch() {
      if (launchFlag) {
        updateCovidCountFromDatabase();
 
-       getLocations(searchedState, "San Francisco");
+       getCitiesInState(searchedState, "San Francisco");
        setLaunchFlag(false);
      }
    }
 
+   // Prevents weird side effects (like being called twice)
    useEffect(() => {
-     getLocationsOnLaunch();
+     populateMapOnLaunch();
    })
 
-  function getLocations(state, address) {
-//  setFoundCityFlag(false);
-//    setFoundStateFlag(false);
+   // Use the API to fetch all cities in the state and store them in locations array
+   // Extract relevant COVID-19 data and update the aggregated data UI section
+  function getCitiesInState(state, address) {
     foundCityFlag = false;
 
     fetch("https://covid-api.com/api/reports?date=2020-04-16&iso=USA&region_province=" + state)
@@ -103,21 +94,19 @@ const MapComponent = forwardRef((props, ref) => {
         setStateDate(tempState.date);
         setStateLastUpdate(tempState.last_update);
 
+        // Iterate through every city.
         for(var x = 0; x < data.data[0].region.cities.length; x++) {
             let tempCity = data.data[0].region.cities[x];
 
-
+            // Store relevant info to generate markers on map in location array
             tempCity.location = {lat: tempCity.lat, lng: tempCity.long};
 
             if (dictionary[tempCity.fips]) {
               tempCity.confirmed = dictionary[tempCity.fips].cases;
             }
-
             tempCity.location.lat = parseFloat(tempCity.location.lat);
             tempCity.location.lng = parseFloat(tempCity.location.lng);
-
             location.push(tempCity);
-
 
               if (tempCity.name == address) {
                 setCityConfirmedCases(tempCity.confirmed);
@@ -136,10 +125,6 @@ const MapComponent = forwardRef((props, ref) => {
             setCityDate("N/A");
             setCityLastUpdate("N/A");
         }
-
-        // TODO: search for specified city if exist
-        // use react hooks to save relative data
-
 
         setLocations(location);
         setZoom(7);
@@ -163,15 +148,12 @@ const MapComponent = forwardRef((props, ref) => {
       });
   }
 
-// This simply retrieves the correct state name from the entered search
-  function getCoordinates(address){
-    // console.log("in getcoordinares, address is " + address);
-    // setSearchedLocation(address);
-    // console.log("in getCoordinates, searchedAddress1 is " + searchedLocation);
+// Use API to determine which state the seacrched location is located in
+  function getStateNameBySearchedLocation(address){
     fetch("https://maps.googleapis.com/maps/api/geocode/json?address="+address+"&key=AIzaSyD8Dy_5tEaquXe9u861bwg0C-78KOrBC4o")
       .then(response => response.json())
       .then(data => {
-        setCurrentPosition(data.results[0].geometry.location) // Note: Look into making this marker a diff color
+        setCurrentPosition(data.results[0].geometry.location)
         var state = "";
         for(var x = 0; x < data.results[0].address_components.length; x++) {
           if(data.results[0].address_components[x].types[0] == 'administrative_area_level_1') {
@@ -179,22 +161,18 @@ const MapComponent = forwardRef((props, ref) => {
             break;
           }
         }
-        //setSearchedLocation(address);
-        //console.log("in getCoordinates, searchedAddress is " + searchedLocation);
 
         setSearchedState(state);
-        getLocations(state, address);
+        getCitiesInState(state, address);
       })
   }
 
-
-
-  // Fetch all data in firebase and store data in array.
-  // Then, convert to dictionary
+  // Fetch all data in firebase and store updated covid case counts (by city) in array.
+  // Then, convert array to dictionary for simpler access
   function updateCovidCountFromDatabase() {
     axios.get('/locations.json')
       .then(response => {
-        console.log(response.data);
+        //console.log(response.data);
         const fetchedResults = [];
         for (let key in response.data) {
 
@@ -219,25 +197,20 @@ const MapComponent = forwardRef((props, ref) => {
 const [radius, setRadius] = useState(1200);
 const [hotspot, setHotspot] = useState(false);
 
-
-
 function createHotSpot(mapProps, map, clickEvent) {
-  console.log(currentPosition);
-  console.log(mapProps);
-
   setHotspotCoord(
     {lat: mapProps.latLng.lat(), lng: mapProps.latLng.lng()}
   );
 }
 
-function updateCountAtLocation() {
+// Make a post request on firebase to update database with new COVID case count
+function updateCaseCountOnSelectedCity() {
   let data = {
     name: selected.name,
     cases: caseCount,
     fips: selected.fips
   }
 
-  // Simple test to see if pushed to database
   console.log(selected);
   selected.confirmed = caseCount;
 
@@ -246,16 +219,12 @@ function updateCountAtLocation() {
     .catch(error => console.log(error));
 
   alert("Updated case count at " + selected.name);
-  //store all updated values in array
-  // create new markers
-
 }
 
-// TODO: Still need to handle edge cases (do not allow user to search empty string and display alert that search found nothing if not in US)
-function onMarkerDelete(selectedMarker) {
+// Resets case count to 0 of selected City and updates database
+function onClearCaseCount(selectedMarker) {
   setCaseCount(0);
   selectedMarker.confirmed = 0;
-  // need to push to database
 
   let data = {
     name: selected.name,
@@ -270,97 +239,78 @@ function onMarkerDelete(selectedMarker) {
 
 
   return (
+    <Container style={{ padding: 20 }}>
+      <Row>
+        <Col xs={12} md={8}>
+          <LoadScript
+            googleMapsApiKey='AIzaSyD8Dy_5tEaquXe9u861bwg0C-78KOrBC4o'>
+            <GoogleMap
+              mapContainerStyle={mapStyles}
+              zoom={currentZoom ? currentZoom : defaultZoom}
+              center={currentPosition.lat ? currentPosition : defaultCenter}
+              onClick={createHotSpot}
+              >
 
-
-      <Container style={{ padding: 20 }}>
-  <Row>
-    <Col xs={12} md={8}>
-      <LoadScript
-        googleMapsApiKey='AIzaSyD8Dy_5tEaquXe9u861bwg0C-78KOrBC4o'>
-         <GoogleMap
-           mapContainerStyle={mapStyles}
-           zoom={currentZoom ? currentZoom : defaultZoom}
-           center={currentPosition.lat ? currentPosition : defaultCenter}
-           onClick={createHotSpot}
-         >
-
-         // Generates all markers in the state of the searched region
-         {
-             locations.map(item => {
-               return (
-               <Marker key={item.lat + "," + item.long} position={item.location} onClick={() => onSelect(item)}/>
-               )
-             })
-          }
-
-
-           // updated case values in county markers
-
-          // TODO: placeholder for radius
-          <Circle
-             radius={radius}
-             center={hotspotCoord}
-             onMouseover={() => console.log('mouseover')}
-             onClick={() => console.log('click')}
-             onMouseout={() => console.log('mouseout')}
-             strokeColor='transparent'
-             strokeOpacity={0}
-             strokeWeight={5}
-             fillColor='#FF0000'
-             fillOpacity={0.2}
-       />
-
-
-
-
-            {
-                markers.map((marker, index) => {
+              // Generates all markers in the state of the searched region. Abstract this to Markers component
+              {
+                locations.map(item => {
                   return (
-                  <Marker key={index} position={marker.location} onClick={() => onSelect(marker)}/>
+                    <Marker key={item.lat + "," + item.long} position={item.location} onClick={() => onSelect(item)}/>
                   )
                 })
-             }
+              }
 
+              // Hotspot UI. Abstract this to Hotspot component
+              <Circle
+                radius={radius}
+                center={hotspotCoord}
+                onMouseover={() => console.log('mouseover')}
+                onClick={() => console.log('click')}
+                onMouseout={() => console.log('mouseout')}
+                strokeColor='transparent'
+                strokeOpacity={0}
+                strokeWeight={5}
+                fillColor='#FF0000'
+                fillOpacity={0.2}
+                />
 
-          // Display a popup InfoWindow if user clicks on a marker
-          {
-           selected.location &&
-           (
-             <InfoWindow
-               position={selected.location}
-               clickable={true}
-               onCloseClick={() => setSelected({})}
-               >
-                 <div className={classes.label}>
-                   <p>
-                     <label>County: </label>
-                     {selected.name}
-                   </p>
-                   <p>
-                     <label>Confirmed Cases: </label>
-                     <input type="number" value={caseCount} onChange={e => setCaseCount(+e.target.value)}></input>
-                   </p>
+              // Display a popup InfoWindow if user clicks on a marker. Abstract this to InfoWindow component
+              {
+                selected.location &&
+                (
+                  <InfoWindow
+                    position={selected.location}
+                    clickable={true}
+                    onCloseClick={() => setSelected({})}
+                    >
+                    <div className={classes.label}>
+                      <p>
+                        <label>County: </label>
+                        {selected.name}
+                      </p>
+                      <p>
+                        <label>Confirmed Cases: </label>
+                        <input type="number" value={caseCount} onChange={e => setCaseCount(+e.target.value)}></input>
+                      </p>
+                      <button onClick={updateCaseCountOnSelectedCity}>Confirm Changes</button>
+                      <button onClick={() => onClearCaseCount(selected)}>Clear</button>
+                    </div>
+                  </InfoWindow>
+                )
+              }
 
-                   <button onClick={updateCountAtLocation}>Confirm Changes</button>
-                   <button onClick={() => onMarkerDelete(selected)}>Delete</button>
-                 </div>
-             </InfoWindow>
-           )
-        }
+              // Generates a marker on current location. Abstract this to CurrentMarker component
+              {
+                currentPosition.lat ?
+                  <Marker
+                    position={currentPosition}
+                    label="Current Location"
+                    /> :
+                    null
+               }
 
-        // Generates a marker on current location.
-        {
-           currentPosition.lat ?
-           <Marker
-             position={currentPosition}
-             label="Current Location"
-             /> :
-           null
-         }
-
-         </GoogleMap>
-      </LoadScript>
-
+            </GoogleMap>
+          </LoadScript>
 
     </Col>
     <Col xs={6} md={4}>
@@ -404,8 +354,6 @@ function onMarkerDelete(selectedMarker) {
   </Row>
 
 </Container>
-
-
 
 
   )
