@@ -285,7 +285,7 @@ function onClearCaseCount(selectedMarker) {
                     >
                     <div className={classes.label}>
                       <p>
-                        <label>County: </label>
+                        <label>City: </label>
                         {selected.name}
                       </p>
                       <p>
